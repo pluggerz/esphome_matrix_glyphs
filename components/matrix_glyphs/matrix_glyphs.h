@@ -246,8 +246,6 @@ namespace esphome
 
             void state_callback(bool state) const
             {
-                ESP_LOGI(MATRIX_GLYPHS_TAG, "BinarySensorWidget::state_callback->entry - %s", sticky_switch_->get_object_id().c_str());
-
                 if (!is_sticky())
                 {
                     ESP_LOGI(MATRIX_GLYPHS_TAG, "BinarySensorWidget::state_callback->publish non sticky - %s", sticky_switch_->get_object_id().c_str());
@@ -256,17 +254,12 @@ namespace esphome
                 else if (alert_sensor_->has_state() && alert_sensor_->state == state)
                 {
                     // no change
-                    ESP_LOGI(MATRIX_GLYPHS_TAG, "BinarySensorWidget::state_callback->no change - %s", sticky_switch_->get_object_id().c_str());
                     return;
                 }
                 else if (state)
                 {
                     ESP_LOGI(MATRIX_GLYPHS_TAG, "BinarySensorWidget::state_callback->publish sticky - %s", sticky_switch_->get_object_id().c_str());
                     alert_sensor_->publish_state(state);
-                }
-                else
-                {
-                    ESP_LOGI(MATRIX_GLYPHS_TAG, "BinarySensorWidget::state_callback->ignored - %s", sticky_switch_->get_object_id().c_str());
                 }
             }
 
@@ -285,8 +278,6 @@ namespace esphome
                     // the initial state is ignored :S, so lets update always
                     state_callback(_source->state);
                 }
-
-                ESP_LOGI(MATRIX_GLYPHS_TAG, "BinarySensorWidget::draw - %s", alert_sensor_->state ? "ON" : "OFF");
 
                 const auto &glyph = alert_sensor_->state ? on_glyph_ : off_glyph_;
                 if (glyph)
