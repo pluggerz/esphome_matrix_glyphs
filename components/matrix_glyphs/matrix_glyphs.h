@@ -18,6 +18,7 @@ namespace esphome
     namespace matrix_glyphs
     {
         using esphome::binary_sensor::BinarySensor;
+        using std::shared_ptr;
         using namespace esphome::display;
         using esphome::display::Image;
         using esphome::sensor::Sensor;
@@ -41,6 +42,26 @@ namespace esphome
             virtual void draw(Offset &offset) const = 0;
         };
 
+        class AnimationGlyph : public Glyph
+        {
+        public:
+            AnimationGlyph()
+            {
+            }
+            AnimationGlyph(const std::vector<std::string> &mdiNames);
+            std::vector<shared_ptr<Glyph> > glyphs_;
+
+            virtual void draw(Offset &offset) const override
+            {
+                long interval_in_millis = 200;
+                long rawIndex = millis() / interval_in_millis;
+                long index = rawIndex % glyphs_.size();
+
+                auto glyph = glyphs_[index];
+                glyph->draw(offset);
+            }
+        };
+
         class GlyphOutput
         {
         private:
@@ -53,6 +74,42 @@ namespace esphome
             }
 
         public:
+            static void draw_seperator_group(Offset &offset)
+            {
+                auto *buffer = &offset.buffer;
+                int height = buffer->get_height();
+                (*offset)++;
+                for (int idx = 0; idx < height; ++idx)
+                {
+                    buffer->draw_pixel_at(*offset, idx);
+                }
+                (*offset)++;
+                buffer->draw_pixel_at(*offset, 0);
+                buffer->draw_pixel_at(*offset, height - 1);
+            }
+            static void draw_seperator_widgets(Offset &offset, bool simulate)
+            {
+                auto *buffer = &offset.buffer;
+
+                long interval_in_millis = 4000;
+                long index = millis() / interval_in_millis;
+
+                if (!simulate)
+                {
+                    auto height = buffer->get_height();
+                    auto mid = height >> 1;
+                    auto spit = 1 + (height >> 3);
+
+                    buffer->draw_pixel_at(*offset, mid - spit);
+                    if (index & 0x1)
+                        buffer->draw_pixel_at(*offset, mid - spit + 1);
+                    else
+                        buffer->draw_pixel_at(*offset, mid + spit - 1);
+                    buffer->draw_pixel_at(*offset, mid + spit);
+                }
+                (*offset) += 2;
+            }
+
             static void print(Offset &offset, int y, Font *font, Color color, const char *text)
             {
                 print(offset, y, font, color, TextAlign::TOP_LEFT, text);
@@ -104,6 +161,29 @@ namespace esphome
                 thisBuffer->print(x, y, font, color, align, text);
                 *offset = x_start + width;
             }
+
+#ifdef USE_TIME
+            static void strftime(Offset &offset, int y, Font *font, Color color, TextAlign align, const char *format,
+                                 time::ESPTime time)
+            {
+                char buffer[64];
+                size_t ret = time.strftime(buffer, sizeof(buffer), format);
+                if (ret > 0)
+                    print(offset, y, font, color, align, buffer);
+            }
+            static void strftime(Offset &offset, int y, Font *font, Color color, const char *format, time::ESPTime time)
+            {
+                strftime(offset, y, font, color, TextAlign::TOP_LEFT, format, time);
+            }
+            static void strftime(Offset &offset, int y, Font *font, TextAlign align, const char *format, time::ESPTime time)
+            {
+                strftime(offset, y, font, COLOR_ON, align, format, time);
+            }
+            static void strftime(Offset &offset, int y, Font *font, const char *format, time::ESPTime time)
+            {
+                strftime(offset, y, font, COLOR_ON, TextAlign::TOP_LEFT, format, time);
+            }
+#endif
         };
 
         class ImageGlyph : public virtual Glyph
@@ -145,11 +225,17 @@ namespace esphome
                 if (glyph_)
                 {
                     glyph_->draw(offset);
-                    *offset += 1;
                 }
+                Offset copy_offset = offset;
+                GlyphOutput::draw_seperator_widgets(offset, true);
+                auto current_offset = offset;
                 for (auto it = std::begin(widgets); it != std::end(widgets); ++it)
                 {
                     (*it)->draw(offset);
+                }
+                if (*current_offset != *offset)
+                {
+                    GlyphOutput::draw_seperator_widgets(copy_offset, false);
                 }
             }
         };
@@ -193,15 +279,84 @@ namespace esphome
 
             virtual void draw(Offset &offset) const override
             {
+                GlyphOutput::draw_seperator_group(offset);
                 for (auto it = std::begin(groups); it != std::end(groups); ++it)
                 {
                     (*it)->draw(offset);
+                    if (it + 1 != std::end(groups))
+                    {
+                        GlyphOutput::draw_seperator_group(offset);
+                    }
                 }
             }
         };
 
         extern Controller controller;
 
+#ifdef USE_TIME
+        class TimeWidget : public Widget
+        {
+        protected:
+            esphome::time::RealTimeClock *source_ = nullptr;
+
+        public:
+            void set_source(esphome::time::RealTimeClock *source) { source_ = source; }
+        };
+
+        class DigitalTimeWidget : public TimeWidget
+        {
+            std::string format_{"%H:%M:%S"};
+
+        public:
+            virtual void draw(Offset &offset) const override
+            {
+                if (source_ == nullptr)
+                    GlyphOutput::print(offset, 0, offset.font, "TIME");
+                else
+                    GlyphOutput::strftime(offset, 0, offset.font, format_.c_str(), source_->now());
+            }
+            void set_format(const std::string format) { format_ = format; }
+        };
+
+        class AnalogTimeWidget : public TimeWidget
+        {
+        private:
+            void drawHandle(Offset &offset, int timeStep, int radius) const
+            {
+                int HORIZONTAL_SIZE=8;
+                int VERTICAL_SIZE=8;
+
+                double t = 2 * 3.14159265 * (timeStep - 15) / 60;
+                int x = (int)(HORIZONTAL_SIZE / 2 + radius * cos(t));
+                int y = (int)(VERTICAL_SIZE / 2 + radius * sin(t));
+                
+                offset.buffer.line(*offset + HORIZONTAL_SIZE/2,VERTICAL_SIZE/2, *offset + x, y);
+            }
+
+        public:
+            virtual void draw(Offset &offset) const override
+            {
+                if (source_ == nullptr)
+                    GlyphOutput::print(offset, 0, offset.font, "?");
+                else
+                {
+                    float hour = source_->now().hour % 12;
+                    float minute = source_->now().minute;
+                    float second = source_->now().second;
+                    auto &b = offset.buffer;
+                    auto r = 4;
+                    
+                    // b.rectangle(*offset, 0, r*2, r*2);
+                    drawHandle(offset, minute, 4);
+                    drawHandle(offset, hour * 5.0 + minute / 12.0, 3);
+
+                    *offset += 8;
+                }
+            }
+        };
+#endif
+
+#ifdef USE_SENSOR
         class SensorWidget : public Widget
         {
         protected:
@@ -228,6 +383,7 @@ namespace esphome
                                         source_->get_unit_of_measurement().c_str());
             }
         };
+#endif
 
         class BinarySensorWidget : public Widget
         {
@@ -246,15 +402,15 @@ namespace esphome
 
             void state_callback(bool state) const
             {
-                if (!is_sticky())
-                {
-                    ESP_LOGI(MATRIX_GLYPHS_TAG, "BinarySensorWidget::state_callback->publish non sticky - %s", sticky_switch_->get_object_id().c_str());
-                    alert_sensor_->publish_state(state);
-                }
-                else if (alert_sensor_->has_state() && alert_sensor_->state == state)
+                if (alert_sensor_->has_state() && alert_sensor_->state == state)
                 {
                     // no change
                     return;
+                }
+                else if (!is_sticky())
+                {
+                    ESP_LOGI(MATRIX_GLYPHS_TAG, "BinarySensorWidget::state_callback->publish non sticky - %s", sticky_switch_->get_object_id().c_str());
+                    alert_sensor_->publish_state(state);
                 }
                 else if (state)
                 {
@@ -266,6 +422,9 @@ namespace esphome
         public:
             BinarySensorWidget();
 
+            void set_on_glyph(const std::shared_ptr<Glyph> &glyph) { on_glyph_ = glyph; }
+            void set_off_glyph(const std::shared_ptr<Glyph> &glyph) { off_glyph_ = glyph; }
+
             // void set_image(Image *image) { glyph_ = new ImageGlyph(image); }
             void set_sensor(BinarySensor *source);
 
@@ -274,7 +433,8 @@ namespace esphome
 
             virtual void draw(Offset &offset) const override
             {
-                if (_source != nullptr && _source->has_state()) {
+                if (_source != nullptr && _source->has_state())
+                {
                     // the initial state is ignored :S, so lets update always
                     state_callback(_source->state);
                 }

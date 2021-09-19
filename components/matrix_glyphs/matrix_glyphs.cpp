@@ -12,22 +12,6 @@ namespace esphome
     {
         Controller controller;
 
-        class AnimationGlyph : public Glyph
-        {
-        public:
-            std::vector<shared_ptr<Glyph> > glyphs_;
-
-            virtual void draw(Offset &offset) const
-            {
-                long interval_in_millis = 200;
-                long rawIndex = millis() / interval_in_millis;
-                long index = rawIndex % glyphs_.size();
-
-                auto glyph = glyphs_[index];
-                glyph->draw(offset);
-            }
-        };
-
         class StickySwitch : public Switch
         {
         public:
@@ -41,6 +25,14 @@ namespace esphome
         BinarySensorWidget::BinarySensorWidget() : sticky_switch_(new StickySwitch())
         {
         }
+    }
+}
+
+esphome::matrix_glyphs::AnimationGlyph::AnimationGlyph(const std::vector<std::string> &mdiNames)
+{
+    for (auto it = std::begin(mdiNames); it != std::end(mdiNames); ++it)
+    {
+        glyphs_.push_back(std::make_shared<MdiGlyph>(*it));
     }
 }
 
@@ -64,10 +56,7 @@ void esphome::matrix_glyphs::BinarySensorWidget::set_sensor(BinarySensor *source
         const auto &device_class = _source->get_device_class();
         if (device_class == "motion")
         {
-            auto animation = std::make_shared<AnimationGlyph>();
-            animation->glyphs_.push_back(std::make_shared<MdiGlyph>("run"));
-            animation->glyphs_.push_back(std::make_shared<MdiGlyph>("walk"));
-            on_glyph_ = animation;
+            on_glyph_ = std::make_shared<AnimationGlyph>(AnimationGlyph({"run", "walk"}));
         }
         else
         {
