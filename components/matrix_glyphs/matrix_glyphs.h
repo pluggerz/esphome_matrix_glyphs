@@ -54,7 +54,7 @@ namespace esphome
             virtual void draw(Offset &offset) const override
             {
                 long interval_in_millis = 200;
-                long rawIndex = esphome::millis() / interval_in_millis;
+                long rawIndex = millis() / interval_in_millis;
                 long index = rawIndex % glyphs_.size();
 
                 auto glyph = glyphs_[index];
@@ -92,7 +92,7 @@ namespace esphome
                 auto *buffer = &offset.buffer;
 
                 long interval_in_millis = 4000;
-                long index = esphome::millis() / interval_in_millis;
+                long index = millis() / interval_in_millis;
 
                 if (!simulate)
                 {
