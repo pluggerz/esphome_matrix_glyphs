@@ -211,6 +211,7 @@ namespace esphome
         {
         };
 
+
         class Group : virtual Glyph
         {
             std::shared_ptr<Glyph> glyph_;
@@ -228,13 +229,16 @@ namespace esphome
                     glyph_->draw(offset);
                 }
                 Offset copy_offset = offset;
-                GlyphOutput::draw_seperator_widgets(offset, true);
+                if (glyph_)
+                {
+                    GlyphOutput::draw_seperator_widgets(offset, true);
+                }
                 auto current_offset = offset;
                 for (auto it = std::begin(widgets); it != std::end(widgets); ++it)
                 {
                     (*it)->draw(offset);
                 }
-                if (*current_offset != *offset)
+                if (*current_offset != *offset && glyph_)
                 {
                     GlyphOutput::draw_seperator_widgets(copy_offset, false);
                 }
@@ -280,7 +284,9 @@ namespace esphome
 
             virtual void draw(Offset &offset) const override
             {
-                GlyphOutput::draw_seperator_group(offset);
+                auto len = groups.size();
+                if (len > 1)
+                    GlyphOutput::draw_seperator_group(offset);
                 for (auto it = std::begin(groups); it != std::end(groups); ++it)
                 {
                     (*it)->draw(offset);
@@ -293,6 +299,19 @@ namespace esphome
         };
 
         extern Controller controller;
+
+        class TextWidget : public Widget {
+            std::string format{""};
+
+            
+
+            public:
+            void set_format(const std::string &value) { format=value; }
+            virtual void draw(Offset &offset) const override
+            {
+                GlyphOutput::print(offset, 0, offset.font, format.c_str());
+            }
+        };
 
 #ifdef USE_TIME
         class TimeWidget : public Widget
@@ -379,7 +398,7 @@ namespace esphome
                     GlyphOutput::printf(offset, 0, offset.font, "nan%s",
                                         source_->get_unit_of_measurement().c_str());
                 else
-                    GlyphOutput::printf(offset, 0, offset.font, "%4.1f%s",
+                    GlyphOutput::printf(offset, 0, offset.font, "%4.2f%s",
                                         source_->get_state(),
                                         source_->get_unit_of_measurement().c_str());
             }
@@ -446,6 +465,12 @@ namespace esphome
                     glyph->draw(offset);
                     *offset += 1;
                 }
+            }
+        };
+
+        class EmptyGlyph: public Glyph  {
+virtual void draw(Offset &offset) const
+            {
             }
         };
 

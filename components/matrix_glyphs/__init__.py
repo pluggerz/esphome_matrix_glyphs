@@ -37,7 +37,7 @@ from esphome.const import (
     CONF_TYPE,
     CONF_VISIBLE,
     DEVICE_CLASS_MOTION,
-    DEVICE_CLASS_TEMPERATURE
+    DEVICE_CLASS_TEMPERATURE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,6 +50,7 @@ MDI_DEVICE_CLASS_TEMPERATURE = "thermometer"
 MDI_DEVICE_CLASS_MOTION_WALK = "walk"
 MDI_DEVICE_CLASS_MOTION_RUN = "run"
 
+CONF_TEXT = 'text'
 CONF_GLYPH = 'glyph'
 CONF_GLYPH_ON = 'glyph_on'
 CONF_GLYPH_OFF = 'glyph_off'
@@ -72,6 +73,7 @@ SensorWidget = b_matrix_glyph_ns.class_("SensorWidget")
 BinarySensorWidget = b_matrix_glyph_ns.class_("BinarySensorWidget")
 DigitalTimeWidget = b_matrix_glyph_ns.class_("DigitalTimeWidget")
 AnalogTimeWidget = b_matrix_glyph_ns.class_("AnalogTimeWidget")
+TextWidget = b_matrix_glyph_ns.class_("TextWidget")
 
 GLYPH_ICON_SCHEMA = _Schema({
     cv.Required('id'): cv.use_id(image.Image_),
@@ -131,7 +133,7 @@ GLYPH_MDI_SCHEMA = _Schema({
 GLYPH_TYPE_SCHEMA = cv.Any(
     cv.typed_schema(
         {
-            'empty': {},
+            'empty': _Schema({}),
             'image': cv.Schema(GLYPH_ICON_SCHEMA),
             'mdi':  cv.Schema(GLYPH_MDI_SCHEMA)
         }
@@ -162,11 +164,17 @@ WIDGET_ANALOG_TIME_SCHEMA = _Schema({
     cv.Required(CONF_ID): cv.use_id(time.RealTimeClock)
 })
 
+WIDGET_TEXT_SCHEMA = _Schema({
+    cv.GenerateID(CONF_RANDOM): cv.declare_id(TextWidget),
+    cv.Required(CONF_FORMAT): cv.string
+})
+
 WIDGET_TYPE_SCHEMA = cv.Any(
     cv.typed_schema(
         {
             CONF_BINARY_SENSOR: cv.Schema(WIDGET_BINARY_SENSOR_SCHEMA),
             CONF_SENSOR: cv.Schema(WIDGET_SENSOR_SCHEMA),
+            CONF_TEXT: cv.Schema(WIDGET_TEXT_SCHEMA),
             CONF_ANALOG_TIME: cv.Schema(WIDGET_ANALOG_TIME_SCHEMA),
             CONF_DIGITAL_TIME: cv.Schema(WIDGET_DIGITAL_TIME_SCHEMA),
         }
@@ -217,10 +225,16 @@ async def _create_glyph_mdi(config: dict):
             f"std::make_shared<esphome::matrix_glyphs::MdiGlyph>(\"{rawIcon}\")")
 
 
+async def _create_glyph_none(config: dict):
+    return MockObj(
+            f"std::make_shared<esphome::matrix_glyphs::EmptyGlyph>()")
+ 
+
 async def _create_glyph(config: dict):
     type = config[CONF_TYPE]
-
-    if (type == 'image'):
+    if (type == 'empty' or type == 'none'):
+        return None
+    elif (type == 'image'):
         return await _create_glyph_image(config)
     elif (type == 'mdi'):
         return await _create_glyph_mdi(config)
@@ -229,7 +243,9 @@ async def _create_glyph(config: dict):
 
 
 async def _set_glyph(var: Pvariable, config: dict):
-    cg.add(var.set_image(await _create_glyph(config)))
+    glyph = await _create_glyph(config)
+    if glyph:
+        cg.add(var.set_image(glyph))
 
 
 async def _process_digital_time(idx: id, groupVar: Pvariable, config: dict):
@@ -303,6 +319,13 @@ async def _process_sensor(groupVar: Pvariable, config: dict):
     cg.add(widgetVar.set_sensor(await cg.get_variable(config[CONF_ID])))
     cg.add(groupVar.add(widgetVar))
 
+async def _process_text(groupVar: Pvariable, config: dict):
+    widgetVar = cg.new_Pvariable(config[CONF_RANDOM])
+
+    format = config[CONF_FORMAT]
+    cg.add(widgetVar.set_format(format))
+    cg.add(groupVar.add(widgetVar))
+
 
 async def _process_source(idx: id, groupVar: Pvariable, config: dict):
     type = config[CONF_TYPE]
@@ -316,8 +339,10 @@ async def _process_source(idx: id, groupVar: Pvariable, config: dict):
     elif (type == CONF_SENSOR):
         _validate_sensor(type, config[CONF_ID])
         await _process_sensor(groupVar, config)
+    elif (type == CONF_TEXT):
+        await _process_text(groupVar, config)
     else:
-        raise
+        raise Exception(f"Unknwon id: {id} config: {config}")
 
 
 async def _process_widget(idx: int, groupVar: Pvariable, config: dict):
@@ -333,8 +358,8 @@ async def _process_group(controllerVar: Pvariable, config: dict):
 
     cg.add(controllerVar.add(var))
 
-    await _set_glyph(var, config[CONF_GLYPH])
-
+    image = await _set_glyph(var, config[CONF_GLYPH])
+        
     widgets: dict = config[CONF_WIDGETS]
     for idx, c in enumerate(widgets):
         await _process_widget(idx, var, c)
