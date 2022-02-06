@@ -211,16 +211,25 @@ namespace esphome
         {
         };
 
-
         class Group : virtual Glyph
         {
+            Switch *_switch{nullptr};
             std::shared_ptr<Glyph> glyph_;
             std::vector<Widget *> widgets;
+            bool _visible{true};
 
         public:
             void add(Widget *widget) { widgets.push_back(widget); }
             void set_image(Image *image) { glyph_ = std::make_shared<ImageGlyph>(image); }
             void set_image(const std::shared_ptr<Glyph> &glyph) { glyph_ = glyph; }
+            void set_visible(bool value) { _visible = value; }
+            void set_switch(Switch *value) { _switch = value; }
+            bool is_visible() const
+            {
+                if (_switch)
+                    return _switch->state;
+                return _visible;
+            }
 
             virtual void draw(Offset &offset) const override
             {
@@ -284,29 +293,36 @@ namespace esphome
 
             virtual void draw(Offset &offset) const override
             {
-                auto len = groups.size();
-                if (len > 1)
-                    GlyphOutput::draw_seperator_group(offset);
+                int len = 0;
+                for (auto it = std::begin(groups); it != std::end(groups); ++it)
+                    if ((*it)->is_visible())
+                        len++;
+
+                bool drawn_start = len > 1 ? false : true;
                 for (auto it = std::begin(groups); it != std::end(groups); ++it)
                 {
-                    (*it)->draw(offset);
-                    if (it + 1 != std::end(groups))
+                    if (!(*it)->is_visible())
+                        continue;
+
+                    if (!drawn_start)
                     {
                         GlyphOutput::draw_seperator_group(offset);
+                        drawn_start = true;
                     }
+                    (*it)->draw(offset);
+                    drawn_start = false;
                 }
             }
         };
 
         extern Controller controller;
 
-        class TextWidget : public Widget {
+        class TextWidget : public Widget
+        {
             std::string format{""};
 
-            
-
-            public:
-            void set_format(const std::string &value) { format=value; }
+        public:
+            void set_format(const std::string &value) { format = value; }
             virtual void draw(Offset &offset) const override
             {
                 GlyphOutput::print(offset, 0, offset.font, format.c_str());
@@ -343,14 +359,14 @@ namespace esphome
         private:
             void drawHandle(Offset &offset, int timeStep, int radius) const
             {
-                int HORIZONTAL_SIZE=8;
-                int VERTICAL_SIZE=8;
+                int HORIZONTAL_SIZE = 8;
+                int VERTICAL_SIZE = 8;
 
                 double t = 2 * 3.14159265 * (timeStep - 15) / 60;
                 int x = (int)(HORIZONTAL_SIZE / 2 + radius * cos(t));
                 int y = (int)(VERTICAL_SIZE / 2 + radius * sin(t));
-                
-                offset.buffer.line(*offset + HORIZONTAL_SIZE/2,VERTICAL_SIZE/2, *offset + x, y);
+
+                offset.buffer.line(*offset + HORIZONTAL_SIZE / 2, VERTICAL_SIZE / 2, *offset + x, y);
             }
 
         public:
@@ -365,7 +381,7 @@ namespace esphome
                     float second = source_->now().second;
                     auto &b = offset.buffer;
                     auto r = 4;
-                    
+
                     // b.rectangle(*offset, 0, r*2, r*2);
                     drawHandle(offset, minute, 4);
                     drawHandle(offset, hour * 5.0 + minute / 12.0, 3);
@@ -468,8 +484,9 @@ namespace esphome
             }
         };
 
-        class EmptyGlyph: public Glyph  {
-virtual void draw(Offset &offset) const
+        class EmptyGlyph : public Glyph
+        {
+            virtual void draw(Offset &offset) const
             {
             }
         };
@@ -491,3 +508,4 @@ virtual void draw(Offset &offset) const
         };
     }
 }
+    
