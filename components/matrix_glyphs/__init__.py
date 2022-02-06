@@ -10,7 +10,6 @@ from esphome.components.font import (
 from esphome.core import CORE
 import importlib
 from esphome.cpp_generator import MockObj, Pvariable
-from esphome.helpers import read_file
 from esphome.voluptuous_schema import _Schema
 from esphome import core
 from pathlib import Path
@@ -33,7 +32,6 @@ from esphome.const import (
     CONF_SENSOR,
     CONF_SIZE,
     CONF_SOURCE,
-    CONF_TIME,
     CONF_TYPE,
     CONF_VISIBLE,
     DEVICE_CLASS_MOTION,
@@ -187,6 +185,7 @@ WIDGET_SCHEMA = _Schema({
 
 GROUP_SCHEMA = _Schema({
     cv.Required(CONF_ID): cv.declare_id(Group),
+    cv.Optional(CONF_SWITCH):  cv.use_id(switch.Switch),
     cv.Optional(CONF_VISIBLE, default=True): cv.boolean,
     cv.Required(CONF_GLYPH): GLYPH_TYPE_SCHEMA,
     cv.Optional(CONF_WIDGETS, default=[]): cv.ensure_list(WIDGET_SCHEMA),
@@ -350,13 +349,16 @@ async def _process_widget(idx: int, groupVar: Pvariable, config: dict):
 
 
 async def _process_group(controllerVar: Pvariable, config: dict):
-    if (config[CONF_VISIBLE] == False):
-        return
-
     id = config[CONF_ID]
     var = cg.new_Pvariable(id)
 
     cg.add(controllerVar.add(var))
+    cg.add(var.set_visible(config[CONF_VISIBLE]))
+
+    if CONF_SWITCH in config:
+        switch = await cg.get_variable(config[CONF_SWITCH])
+        cg.add(var.set_switch(switch))
+    
 
     image = await _set_glyph(var, config[CONF_GLYPH])
         
