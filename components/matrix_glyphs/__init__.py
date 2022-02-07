@@ -183,10 +183,22 @@ WIDGET_SCHEMA = _Schema({
     cv.Required(CONF_SOURCE): WIDGET_TYPE_SCHEMA,
 })
 
+
+def use_switch_or_boolean(value):
+    try:
+        return cv.boolean(value)
+    except:
+        pass
+
+    try:
+        return cv.use_id(switch.Switch)(value)
+    except:
+        raise Exception("Expected true, false or a switch!")
+
+
 GROUP_SCHEMA = _Schema({
     cv.Required(CONF_ID): cv.declare_id(Group),
-    cv.Optional(CONF_SWITCH):  cv.use_id(switch.Switch),
-    cv.Optional(CONF_VISIBLE, default=True): cv.boolean,
+    cv.Optional(CONF_VISIBLE, default=True): use_switch_or_boolean,
     cv.Required(CONF_GLYPH): GLYPH_TYPE_SCHEMA,
     cv.Optional(CONF_WIDGETS, default=[]): cv.ensure_list(WIDGET_SCHEMA),
 })
@@ -226,8 +238,8 @@ async def _create_glyph_mdi(config: dict):
 
 async def _create_glyph_none(config: dict):
     return MockObj(
-            f"std::make_shared<esphome::matrix_glyphs::EmptyGlyph>()")
- 
+        f"std::make_shared<esphome::matrix_glyphs::EmptyGlyph>()")
+
 
 async def _create_glyph(config: dict):
     type = config[CONF_TYPE]
@@ -252,6 +264,7 @@ async def _process_digital_time(idx: id, groupVar: Pvariable, config: dict):
     cg.add(widgetVar.set_source(await cg.get_variable(config[CONF_ID])))
     cg.add(widgetVar.set_format(config[CONF_FORMAT]))
     cg.add(groupVar.add(widgetVar))
+
 
 async def _process_analog_time(idx: id, groupVar: Pvariable, config: dict):
     widgetVar = cg.new_Pvariable(config[CONF_RANDOM])
@@ -318,6 +331,7 @@ async def _process_sensor(groupVar: Pvariable, config: dict):
     cg.add(widgetVar.set_sensor(await cg.get_variable(config[CONF_ID])))
     cg.add(groupVar.add(widgetVar))
 
+
 async def _process_text(groupVar: Pvariable, config: dict):
     widgetVar = cg.new_Pvariable(config[CONF_RANDOM])
 
@@ -353,15 +367,15 @@ async def _process_group(controllerVar: Pvariable, config: dict):
     var = cg.new_Pvariable(id)
 
     cg.add(controllerVar.add(var))
-    cg.add(var.set_visible(config[CONF_VISIBLE]))
-
-    if CONF_SWITCH in config:
-        switch = await cg.get_variable(config[CONF_SWITCH])
+    visible = config[CONF_VISIBLE]
+    if isinstance(visible, bool):
+        cg.add(var.set_visible(visible))
+    else:
+        switch = await cg.get_variable(visible)
         cg.add(var.set_switch(switch))
-    
 
     image = await _set_glyph(var, config[CONF_GLYPH])
-        
+
     widgets: dict = config[CONF_WIDGETS]
     for idx, c in enumerate(widgets):
         await _process_widget(idx, var, c)
@@ -387,7 +401,7 @@ async def to_code(config):
         extract_icons(CORE.config[CONF_BINARY_SENSOR])
     if CONF_SENSOR in CORE.config:
         extract_icons(CORE.config[CONF_SENSOR])
-        
+
     # check if we are complete
     for icon in MDI_SELECTED_GLYPHS_NAMES:
         if icon not in MDI_MAP:
@@ -426,6 +440,3 @@ async def to_code(config):
     groups: dict = config[CONF_GROUPS]
     for i, c in enumerate(groups):
         await _process_group(var, c)
-
-
-    
