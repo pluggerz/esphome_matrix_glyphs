@@ -8,6 +8,7 @@
 
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/sensor/sensor.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/display/display_buffer.h"
 
@@ -325,6 +326,22 @@ namespace esphome
             void set_format(const std::string &value) { format = value; }
             virtual void draw(Offset &offset) const override
             {
+                GlyphOutput::print(offset, 0, offset.font, format.c_str());
+            }
+        };
+
+        class TextSensorWidget : public Widget
+        {
+            text_sensor::TextSensor* sensor_{nullptr};
+
+        public:
+            void set_sensor(text_sensor::TextSensor* value) { sensor_ = value; }
+            virtual void draw(Offset &offset) const override
+            {
+                if (sensor_ == nullptr)
+                    return;
+
+                auto format=sensor_->get_state();
                 GlyphOutput::print(offset, 0, offset.font, format.c_str());
             }
         };

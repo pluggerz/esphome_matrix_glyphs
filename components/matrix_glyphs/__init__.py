@@ -1,4 +1,5 @@
 # depending on https://materialdesignicons.com/
+from cgitb import text
 from logging import Logger
 import logging
 from os import defpath
@@ -18,7 +19,7 @@ import esphome.config_validation as cv
 from esphome import loader
 import sys
 import json
-from esphome.components import sensor, binary_sensor, switch, image, font, time
+from esphome.components import sensor, binary_sensor, switch, image, font, time, text_sensor
 from esphome.const import (
     CONF_BINARY_SENSOR,
     CONF_DEVICE_CLASS,
@@ -49,6 +50,7 @@ MDI_DEVICE_CLASS_MOTION_WALK = "walk"
 MDI_DEVICE_CLASS_MOTION_RUN = "run"
 
 CONF_TEXT = 'text'
+CONF_TEXT_SENSOR = 'text_sensor'
 CONF_GLYPH = 'glyph'
 CONF_GLYPH_ON = 'glyph_on'
 CONF_GLYPH_OFF = 'glyph_off'
@@ -72,6 +74,7 @@ BinarySensorWidget = b_matrix_glyph_ns.class_("BinarySensorWidget")
 DigitalTimeWidget = b_matrix_glyph_ns.class_("DigitalTimeWidget")
 AnalogTimeWidget = b_matrix_glyph_ns.class_("AnalogTimeWidget")
 TextWidget = b_matrix_glyph_ns.class_("TextWidget")
+TextSensorWidget = b_matrix_glyph_ns.class_("TextSensorWidget")
 
 GLYPH_ICON_SCHEMA = _Schema({
     cv.Required('id'): cv.use_id(image.Image_),
@@ -167,12 +170,18 @@ WIDGET_TEXT_SCHEMA = _Schema({
     cv.Required(CONF_FORMAT): cv.string
 })
 
+WIDGET_TEXT_SENSOR_SCHEMA = _Schema({
+    cv.GenerateID(CONF_RANDOM): cv.declare_id(TextSensorWidget),
+    cv.Required(CONF_ID): cv.use_id(text_sensor.TextSensor),
+})
+
 WIDGET_TYPE_SCHEMA = cv.Any(
     cv.typed_schema(
         {
             CONF_BINARY_SENSOR: cv.Schema(WIDGET_BINARY_SENSOR_SCHEMA),
             CONF_SENSOR: cv.Schema(WIDGET_SENSOR_SCHEMA),
             CONF_TEXT: cv.Schema(WIDGET_TEXT_SCHEMA),
+            CONF_TEXT_SENSOR: cv.Schema(WIDGET_TEXT_SENSOR_SCHEMA),
             CONF_ANALOG_TIME: cv.Schema(WIDGET_ANALOG_TIME_SCHEMA),
             CONF_DIGITAL_TIME: cv.Schema(WIDGET_DIGITAL_TIME_SCHEMA),
         }
@@ -339,6 +348,14 @@ async def _process_text(groupVar: Pvariable, config: dict):
     cg.add(widgetVar.set_format(format))
     cg.add(groupVar.add(widgetVar))
 
+async def _process_text_sensor(groupVar: Pvariable, config: dict):
+    widgetVar = cg.new_Pvariable(config[CONF_RANDOM])
+
+    sensorVar = await cg.get_variable(config[CONF_ID])
+
+    cg.add(widgetVar.set_sensor(sensorVar))
+    cg.add(groupVar.add(widgetVar))
+
 
 async def _process_source(idx: id, groupVar: Pvariable, config: dict):
     type = config[CONF_TYPE]
@@ -352,6 +369,8 @@ async def _process_source(idx: id, groupVar: Pvariable, config: dict):
     elif (type == CONF_SENSOR):
         _validate_sensor(type, config[CONF_ID])
         await _process_sensor(groupVar, config)
+    elif (type == CONF_TEXT_SENSOR):
+        await _process_text_sensor(groupVar, config)
     elif (type == CONF_TEXT):
         await _process_text(groupVar, config)
     else:
